@@ -2,15 +2,21 @@ package haproxy
 
 import (
 	"fmt"
-	"github.com/Sirupsen/logrus"
-	"github.com/rancher/healthcheck/types"
-	"io"
+	"log"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
+
+	"github.com/PastureStack/metadata-healthcheck/types"
 )
+
+var validProxyName = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,240}$`)
 
 type Provider struct {
 	builder *haproxyConfigBuilder
@@ -33,42 +39,48 @@ type Server struct {
 }
 
 type haproxyConfigBuilder struct {
-	Name      string
-	ReloadCmd string
-	StartCmd  string
-	Config    string
-	Template  string
+	Name         string
+	ReloadScript string
+	Config       string
+	Template     string
 }
 
 type Backends []*Backend
 
 func (p *Provider) Start() error {
-	logrus.Info("Starting haproxy listener")
+	log.Print("starting HAProxy listener")
 
 	p.builder = &haproxyConfigBuilder{
-		ReloadCmd: "haproxy_reload.sh /etc/haproxy/haproxy.cfg reload",
-		StartCmd:  "haproxy_reload.sh /etc/haproxy/haproxy.cfg start",
-		Config:    "/etc/haproxy/haproxy_new.cfg",
-		Template:  "/etc/haproxy/haproxy_template.cfg",
-		Name:      "healthCheck",
+		ReloadScript: "haproxy_reload.sh",
+		Config:       "/etc/haproxy/haproxy_new.cfg",
+		Template:     "/etc/haproxy/haproxy_template.cfg",
+		Name:         "healthCheck",
 	}
-	// start haproxy
-	if err := p.applyHaproxyConfig(nil, false); err != nil {
+	if err := p.builder.write(nil); err != nil {
+		return err
+	}
+	if err := p.applyHaproxyConfig(false); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (p *Provider) ApplyConfig(string) {
-	logrus.Info("Scheduling apply config")
+	log.Print("scheduling HAProxy configuration update")
+	if err := p.applyConfig(); err != nil {
+		log.Printf("failed to apply HAProxy configuration: %v", err)
+	}
+}
+
+func (p *Provider) applyConfig() error {
 	bes, err := p.buildConfig()
 	if err != nil {
-		logrus.Errorf("Failed to build haproxy config: %v", err)
+		return fmt.Errorf("build configuration: %w", err)
 	}
-	err = p.applyHaproxyConfig(bes, true)
-	if err != nil {
-		logrus.Errorf("Error applying config: %v", err)
+	if err := p.builder.write(bes); err != nil {
+		return fmt.Errorf("write configuration: %w", err)
 	}
+	return p.applyHaproxyConfig(true)
 }
 
 func (p *Provider) Run() {
@@ -84,6 +96,18 @@ func (p *Provider) buildConfig() (backends Backends, err error) {
 	var bes Backends
 	for _, svc := range svcs {
 		hc := svc.HealthCheck
+		if !validProxyName.MatchString(svc.UUID) {
+			return nil, fmt.Errorf("invalid service identifier")
+		}
+		if hc.Port < 1 || hc.Port > 65535 {
+			return nil, fmt.Errorf("service %q has invalid healthcheck port", svc.UUID)
+		}
+		if hc.Interval < 0 || hc.HealthyThreshold < 0 || hc.UnhealthyThreshold < 0 || hc.ResponseTimeout < 0 {
+			return nil, fmt.Errorf("service %q has a negative healthcheck setting", svc.UUID)
+		}
+		if strings.ContainsAny(hc.RequestLine, "\r\n\x00") || len(hc.RequestLine) > 4096 {
+			return nil, fmt.Errorf("service %q has an invalid HTTP request line", svc.UUID)
+		}
 		port := hc.Port
 		config := ""
 		if hc.Interval != 0 {
@@ -100,9 +124,16 @@ func (p *Provider) buildConfig() (backends Backends, err error) {
 			proto = "http"
 		}
 		for _, c := range svc.Servers {
+			if !validProxyName.MatchString(c.UUID) {
+				return nil, fmt.Errorf("service %q has an invalid endpoint identifier", svc.UUID)
+			}
+			address := net.ParseIP(c.Address)
+			if address == nil {
+				return nil, fmt.Errorf("service %q has an invalid endpoint address", svc.UUID)
+			}
 			srvr := &Server{
 				UUID:    c.UUID,
-				Address: c.Address,
+				Address: net.JoinHostPort(address.String(), strconv.Itoa(port)),
 				Port:    port,
 				Config:  config,
 			}
@@ -123,37 +154,43 @@ func (p *Provider) buildConfig() (backends Backends, err error) {
 }
 
 func (b *haproxyConfigBuilder) write(backends Backends) (err error) {
-	var w io.Writer
-	w, err = os.Create(b.Config)
+	t, err := template.ParseFiles(b.Template)
 	if err != nil {
 		return err
 	}
-	var t *template.Template
-	t, err = template.ParseFiles(b.Template)
+	w, err := os.CreateTemp(filepath.Dir(b.Config), ".metadata-healthcheck-*.cfg")
 	if err != nil {
+		return err
+	}
+	temporaryPath := w.Name()
+	defer os.Remove(temporaryPath)
+	if err := w.Chmod(0o644); err != nil {
+		_ = w.Close()
 		return err
 	}
 	conf := make(map[string]interface{})
 	conf["backends"] = backends
-	err = t.Execute(w, conf)
-	return err
-}
-
-func (p *Provider) applyHaproxyConfig(backends Backends, reload bool) error {
-	if reload {
-		// apply config
-		if err := p.builder.write(backends); err != nil {
-			return err
-		}
-		return p.builder.exec(p.builder.ReloadCmd)
+	if err = t.Execute(w, conf); err != nil {
+		_ = w.Close()
+		return err
 	}
-	return p.builder.exec(p.builder.StartCmd)
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, b.Config)
 }
 
-func (b *haproxyConfigBuilder) exec(cmd string) error {
-	output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+func (p *Provider) applyHaproxyConfig(reload bool) error {
+	if reload {
+		return p.builder.exec("reload")
+	}
+	return p.builder.exec("start")
+}
+
+func (b *haproxyConfigBuilder) exec(action string) error {
+	output, err := exec.Command(b.ReloadScript, "/etc/haproxy/haproxy.cfg", action).CombinedOutput()
 	msg := fmt.Sprintf("%v -- %v", b.Name, string(output))
-	logrus.Info(msg)
+	log.Print(msg)
 	if err != nil {
 		return fmt.Errorf("error reloading %v: %v", msg, err)
 	}

@@ -1,33 +1,31 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/patrickmn/go-cache"
-	"github.com/rancher/go-rancher/client"
-	"github.com/rancher/healthcheck/metadata"
-	"github.com/rancher/healthcheck/pkg/haproxy"
-	"github.com/rancher/healthcheck/util"
+	"github.com/PastureStack/metadata-healthcheck/internal/platformapi"
+	"github.com/PastureStack/metadata-healthcheck/metadata"
+	"github.com/PastureStack/metadata-healthcheck/pkg/haproxy"
 )
 
-var Prefix = "cattle-"
-var ServerName = "svname"
-var Status = "status"
+const (
+	serverPrefix  = "endpoint-"
+	serverNameKey = "svname"
+	statusKey     = "status"
+)
 
 func Poll(metadataURL string) error {
-	client, err := util.GetRancherClient()
+	reporter, err := platformapi.NewFromEnvironment()
 	if err != nil {
 		return err
 	}
-	if client == nil {
-		return fmt.Errorf("Can not create RancherClient, No credentials found")
-	}
 
 	metadataPoller := &metadata.Poller{}
-	if err = metadataPoller.Init(metadataURL); err != nil {
+	if err := metadataPoller.Init(metadataURL); err != nil {
 		return err
 	}
 
@@ -40,10 +38,9 @@ func Poll(metadataURL string) error {
 
 	go configUpdater.Run()
 
-	c := cache.New(1*time.Hour, 1*time.Minute)
 	m := &Monitor{
-		client:         client,
-		reportedStatus: c,
+		reporter:       reporter,
+		reportedStatus: newStatusCache(time.Hour),
 	}
 
 	for stat := range m.getStats() {
@@ -54,8 +51,45 @@ func Poll(metadataURL string) error {
 }
 
 type Monitor struct {
-	client         *client.RancherClient
-	reportedStatus *cache.Cache
+	reporter       statusReporter
+	reportedStatus *statusCache
+}
+
+type statusReporter interface {
+	ReportStatus(context.Context, string, string, int64) error
+}
+
+type cachedStatus struct {
+	value     string
+	expiresAt time.Time
+}
+
+type statusCache struct {
+	sync.Mutex
+	ttl    time.Duration
+	now    func() time.Time
+	values map[string]cachedStatus
+}
+
+func newStatusCache(ttl time.Duration) *statusCache {
+	return &statusCache{ttl: ttl, now: time.Now, values: make(map[string]cachedStatus)}
+}
+
+func (c *statusCache) get(key string) (string, bool) {
+	c.Lock()
+	defer c.Unlock()
+	entry, ok := c.values[key]
+	if !ok || !c.now().Before(entry.expiresAt) {
+		delete(c.values, key)
+		return "", false
+	}
+	return entry.value, true
+}
+
+func (c *statusCache) set(key, value string) {
+	c.Lock()
+	defer c.Unlock()
+	c.values[key] = cachedStatus{value: value, expiresAt: c.now().Add(c.ttl)}
 }
 
 func (m *Monitor) getStats() <-chan haproxy.Stat {
@@ -74,18 +108,18 @@ func (m *Monitor) readStats(c chan<- haproxy.Stat) {
 	}
 
 	for {
-		// Sleep up front.  This way if this program gets restarted really fast we don't spam cattle
+		// Sleep before reading so a restart cannot immediately flood the control API.
 		time.Sleep(2 * time.Second)
 
 		stats, err := h.Stats()
 		currentCount := 0
 		if err != nil {
-			logrus.Errorf("Failed to read stats: %v", err)
+			log.Printf("failed to read HAProxy stats: %v", err)
 			continue
 		}
 
 		for _, stat := range stats {
-			if strings.HasPrefix(stat[ServerName], Prefix) {
+			if strings.HasPrefix(stat[serverNameKey], serverPrefix) {
 				currentCount++
 				c <- stat
 			}
@@ -93,17 +127,20 @@ func (m *Monitor) readStats(c chan<- haproxy.Stat) {
 
 		if currentCount != count {
 			count = currentCount
-			logrus.Infof("Monitoring %d backends", count)
+			log.Printf("monitoring %d backends", count)
 		}
 
 	}
 }
 
 func (m *Monitor) processStat(stat haproxy.Stat) {
-	serverName := strings.TrimPrefix(stat[ServerName], Prefix)
-	currentStatus := stat[Status]
+	serverName := strings.TrimPrefix(stat[serverNameKey], serverPrefix)
+	currentStatus := stat[statusKey]
+	if serverName == "" || currentStatus == "" {
+		return
+	}
 
-	previousStatus, _ := m.reportedStatus.Get(serverName)
+	previousStatus, _ := m.reportedStatus.get(serverName)
 	if strings.HasPrefix(currentStatus, "UP ") {
 		// do nothing on partial UP
 		return
@@ -117,27 +154,20 @@ func (m *Monitor) processStat(stat haproxy.Stat) {
 	if previousStatus != currentStatus {
 		err := m.reportStatus(serverName, currentStatus)
 		if err != nil {
-			logrus.Errorf("Failed to report status %s=%s: %v", serverName, currentStatus, err)
+			log.Printf("failed to report status %s=%s: %v", serverName, currentStatus, err)
 			update = false
 		}
 	}
 
 	if update {
-		m.reportedStatus.Set(serverName, currentStatus, cache.DefaultExpiration)
+		m.reportedStatus.set(serverName, currentStatus)
 	}
 }
 
 func (m *Monitor) reportStatus(serverName, currentStatus string) error {
-	_, err := m.client.ServiceEvent.Create(&client.ServiceEvent{
-		HealthcheckUuid:   serverName,
-		ReportedHealth:    currentStatus,
-		ExternalTimestamp: time.Now().Unix(),
-	})
-
-	if err != nil {
+	if err := m.reporter.ReportStatus(context.Background(), serverName, currentStatus, time.Now().Unix()); err != nil {
 		return err
 	}
-
-	logrus.Infof("%s=%s", serverName, currentStatus)
+	log.Printf("%s=%s", serverName, currentStatus)
 	return nil
 }

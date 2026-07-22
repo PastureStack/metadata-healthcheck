@@ -1,6 +1,10 @@
-/.dapper
 /bin
 /dist
 *.swp
-/.trash-cache
-healthcheck
+/metadata-healthcheck
+/package/metadata-healthcheck
+/package/haproxy_reload.sh
+/package/haproxy_template.cfg
+/package/LICENSE
+/package/ORIGIN.md
+/package/THIRD_PARTY_NOTICES.md

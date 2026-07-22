@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ca_root="${PLATFORM_CA_ROOT:-/var/lib/pasturestack/etc/ssl/ca.crt}"
+destination_dir=/usr/local/share/ca-certificates/pasturestack
+destination_file="$destination_dir/platform-ca.crt"
+
+if [[ -f "$ca_root" ]]; then
+  mkdir -p "$destination_dir"
+  install -m 0644 "$ca_root" "$destination_file"
+  update-ca-certificates
+fi
