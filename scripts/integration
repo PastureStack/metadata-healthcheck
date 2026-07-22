@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+image="${IMAGE:-ghcr.io/pasturestack/metadata-healthcheck:dev}"
+suffix="$$"
+network="metadata-healthcheck-test-${suffix}"
+fixture="metadata-healthcheck-fixture-${suffix}"
+agent="metadata-healthcheck-agent-${suffix}"
+fixture_image="local/metadata-healthcheck-fixture:test"
+
+cleanup() {
+  docker container rm -f "$agent" "$fixture" >/dev/null 2>&1 || true
+  docker network rm "$network" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+docker image inspect "$image" >/dev/null
+docker build --provenance=false -f test/integration/Dockerfile -t "$fixture_image" . >/dev/null
+docker network create "$network" >/dev/null
+docker run -d --name "$fixture" --network "$network" --network-alias fixture "$fixture_image" >/dev/null
+
+for _ in $(seq 1 60); do
+  if docker run --rm --network "$network" --entrypoint curl "$image" -fsS http://fixture:8080/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+docker run -d --name "$agent" --network "$network" \
+  -e PLATFORM_URL=http://fixture:8080 \
+  -e PLATFORM_ACCESS_KEY=fixture-access \
+  -e PLATFORM_SECRET_KEY=fixture-secret \
+  "$image" --metadata-url http://fixture:8080/2015-12-19 >/dev/null
+
+events=""
+for _ in $(seq 1 60); do
+  events="$(docker exec "$agent" curl -fsS http://fixture:8080/events 2>/dev/null || true)"
+  if [[ "$events" == *'"healthcheckUuid":"host-fixture_container-fixture_1"'* && "$events" == *'"reportedHealth":"UP"'* ]]; then
+    break
+  fi
+  if [[ "$(docker inspect "$agent" --format '{{.State.Running}}')" != "true" ]]; then
+    docker logs "$agent" >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+
+[[ "$events" == *'"healthcheckUuid":"host-fixture_container-fixture_1"'* ]]
+[[ "$events" == *'"reportedHealth":"INIT"'* ]]
+[[ "$events" == *'"reportedHealth":"UP"'* ]]
+docker exec "$agent" test -S /var/run/haproxy.sock
+docker exec "$agent" haproxy -c -f /etc/haproxy/haproxy.cfg >/dev/null
+docker exec "$agent" grep -Fq 'server endpoint-host-fixture_container-fixture_1 ' /etc/haproxy/haproxy.cfg
+docker run --rm --network "$network" --entrypoint /bin/nc "$image" -z -w 3 "$agent" 42
+
+count_state() {
+  local state="$1"
+  local body="$2"
+  { printf '%s' "$body" | grep -oF "\"reportedHealth\":\"${state}\"" || true; } | wc -l | tr -d ' '
+}
+
+native_init_count="$(count_state INIT "$events")"
+native_up_count="$(count_state UP "$events")"
+docker container rm -f "$agent" >/dev/null
+
+# The compatible control plane injects these legacy names for create-agent
+# system services. The entrypoint must translate them without weakening the
+# public PLATFORM_* contract.
+docker run -d --name "$agent" --network "$network" \
+  -e CATTLE_URL=http://fixture:8080 \
+  -e CATTLE_ACCESS_KEY=fixture-access \
+  -e CATTLE_SECRET_KEY=fixture-secret \
+  "$image" --metadata-url http://fixture:8080/2015-12-19 >/dev/null
+
+for _ in $(seq 1 60); do
+  events="$(docker exec "$agent" curl -fsS http://fixture:8080/events 2>/dev/null || true)"
+  current_init_count="$(count_state INIT "$events")"
+  current_up_count="$(count_state UP "$events")"
+  if (( current_init_count > native_init_count && current_up_count > native_up_count )); then
+    break
+  fi
+  if [[ "$(docker inspect "$agent" --format '{{.State.Running}}')" != "true" ]]; then
+    docker logs "$agent" >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+
+(( current_init_count > native_init_count ))
+(( current_up_count > native_up_count ))
+docker exec "$agent" test -S /var/run/haproxy.sock
+docker run --rm --network "$network" --entrypoint /bin/nc "$image" -z -w 3 "$agent" 42
+
+printf 'METADATA_HEALTHCHECK_INTEGRATION_OK image=%s event_id=host-fixture_container-fixture_1 states=INIT,UP native_env=ok managed_compat_env=ok readiness_tcp_42=ok\n' "$image"

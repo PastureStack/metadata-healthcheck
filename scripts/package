@@ -1,18 +1,24 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-ARCH=${ARCH:?"ARCH not set"}
-SUFFIX=""
-[ "${ARCH}" != "amd64" ] && SUFFIX="_${ARCH}"
+cd "$(dirname "$0")/.."
+tag="${TAG:-dev}"
+repository="${REPO:-ghcr.io/pasturestack}"
+image="${repository}/metadata-healthcheck:${tag}"
+revision="${IMAGE_REVISION:-$(git rev-parse HEAD)}"
 
-source $(dirname $0)/version
+cp bin/metadata-healthcheck pkg/haproxy/haproxy_reload.sh pkg/haproxy/haproxy_template.cfg \
+  LICENSE ORIGIN.md THIRD_PARTY_NOTICES.md package/
 
-cd $(dirname $0)/../package
+docker build \
+  --provenance=false \
+  --network "${DOCKER_BUILD_NETWORK:-host}" \
+  --build-arg UBUNTU_MIRROR="${UBUNTU_MIRROR:-http://archive.ubuntu.com/ubuntu}" \
+  --build-arg IMAGE_CREATED="${IMAGE_CREATED:-2026-07-22T09:31:42Z}" \
+  --build-arg IMAGE_REVISION="$revision" \
+  --build-arg IMAGE_VERSION="$tag" \
+  -t "$image" package/
 
-TAG=${TAG:-${VERSION}${SUFFIX}}
-REPO=${REPO:-rancher}
-
-cp ../bin/healthcheck ../pkg/haproxy/haproxy_reload.sh ../pkg/haproxy/haproxy_template.cfg .
-docker build -t ${REPO}/healthcheck:${TAG} .
-
-echo Built ${REPO}/healthcheck:${TAG}
+mkdir -p dist
+printf '%s\n' "$image" > dist/images
+printf 'Built %s\n' "$image"

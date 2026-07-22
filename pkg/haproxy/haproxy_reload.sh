@@ -1,37 +1,61 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-reload_haproxy(){
-    if [ ! -f /var/run/haproxy.pid ]; then
-        if service haproxy start; then
-            return 0
-        else
-            return 1
-        fi
+pid_file=/var/run/haproxy.pid
+candidate_path=/etc/haproxy/haproxy_new.cfg
+
+validate_config() {
+    haproxy -c -f "$candidate_path"
+}
+
+running_pids() {
+    [[ -s "$pid_file" ]] || return 1
+    local pid
+    while read -r pid; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+        kill -0 "$pid" 2>/dev/null || return 1
+    done < "$pid_file"
+}
+
+start_haproxy() {
+    local config_path="$1"
+    rm -f "$pid_file"
+    haproxy -p "$pid_file" -f "$config_path"
+}
+
+reload_haproxy() {
+    local config_path="$1"
+    if ! running_pids; then
+        start_haproxy "$config_path"
+        return
     fi
-    # restart service
-    if haproxy -p /var/run/haproxy.pid -f $1 -sf $(cat /var/run/haproxy.pid); then
-        return 0
+
+    local old_pids=()
+    mapfile -t old_pids < "$pid_file"
+    haproxy -p "$pid_file" -f "$config_path" -sf "${old_pids[@]}"
+}
+
+apply_config() {
+    local config_path="$1"
+    local action="$2"
+    if [[ "$action" == "start" ]]; then
+        echo "validating and starting haproxy"
+        validate_config
+        install -m 0644 "$candidate_path" "$config_path"
+        reload_haproxy "$config_path"
+    elif ! cmp -s "$config_path" "$candidate_path"; then
+        echo "reloading haproxy configuration"
+        validate_config
+        install -m 0644 "$candidate_path" "$config_path"
+        reload_haproxy "$config_path"
     else
-        return 1
+        echo "haproxy configuration unchanged"
     fi
 }
 
-apply_config()
-{
-    # apply new config
-    if [ $2 == "start" ]; then
-        echo "starting haproxy"
-        reload_haproxy $1
-    elif ! cmp -s $1 /etc/haproxy/haproxy_new.cfg  ; then
-        echo "reloading haproxy config with the new config changes"
-        # replace old config
-        cp -r /etc/haproxy/haproxy_new.cfg  $1
-        reload_haproxy $1
-    else
-        echo "no changes in haproxy config"
-        return 0
-    fi
-}
+if [[ "$#" -ne 2 ]] || { [[ "$2" != "start" ]] && [[ "$2" != "reload" ]]; }; then
+    echo "usage: $0 <config-path> <start|reload>" >&2
+    exit 2
+fi
 
-apply_config $1 $2
+apply_config "$1" "$2"

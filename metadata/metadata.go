@@ -1,15 +1,44 @@
 package metadata
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/Sirupsen/logrus"
-	"github.com/rancher/go-rancher-metadata/metadata"
-	"github.com/rancher/healthcheck/types"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
 	"strings"
+	"time"
+
+	"github.com/PastureStack/metadata-healthcheck/types"
 )
 
-type RMetaFetcher struct {
-	metadataClient metadata.Client
+const maxResponseBytes = 8 << 20
+
+type Service struct {
+	UUID        string            `json:"uuid"`
+	Containers  []Container       `json:"containers"`
+	HealthCheck types.HealthCheck `json:"health_check"`
+}
+
+type Container struct {
+	Name             string            `json:"name"`
+	PrimaryIP        string            `json:"primary_ip"`
+	ServiceName      string            `json:"service_name"`
+	UUID             string            `json:"uuid"`
+	State            string            `json:"state"`
+	StartCount       int               `json:"start_count"`
+	HealthCheckHosts []string          `json:"health_check_hosts"`
+	HealthCheck      types.HealthCheck `json:"health_check"`
+}
+
+type Host struct {
+	UUID string `json:"uuid"`
+}
+
+type HTTPFetcher struct {
+	baseURL string
+	client  *http.Client
 }
 
 type Poller struct {
@@ -18,25 +47,90 @@ type Poller struct {
 
 type Fetcher interface {
 	OnChange(intervalSeconds int, do func(string))
-	GetServices() ([]metadata.Service, error)
-	GetSelfHost() (metadata.Host, error)
-	GetContainers() ([]metadata.Container, error)
+	GetServices() ([]Service, error)
+	GetSelfHost() (Host, error)
+	GetContainers() ([]Container, error)
 }
 
-func (mf RMetaFetcher) OnChange(intervalSeconds int, do func(string)) {
-	mf.metadataClient.OnChange(intervalSeconds, do)
+func NewHTTPFetcher(baseURL string) (*HTTPFetcher, error) {
+	parsed, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, fmt.Errorf("invalid metadata URL")
+	}
+
+	return &HTTPFetcher{
+		baseURL: parsed.String(),
+		client: &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+	}, nil
 }
 
-func (mf RMetaFetcher) GetServices() ([]metadata.Service, error) {
-	return mf.metadataClient.GetServices()
+func (f *HTTPFetcher) get(path string, target any) error {
+	request, err := http.NewRequest(http.MethodGet, f.baseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept", "application/json")
+
+	response, err := f.client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return fmt.Errorf("metadata request %s returned %s", path, response.Status)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("read metadata response %s: %w", path, err)
+	}
+	if len(body) > maxResponseBytes {
+		return fmt.Errorf("metadata response %s exceeds %d bytes", path, maxResponseBytes)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		return fmt.Errorf("decode metadata response %s: %w", path, err)
+	}
+	return nil
 }
 
-func (mf RMetaFetcher) GetContainers() ([]metadata.Container, error) {
-	return mf.metadataClient.GetContainers()
+func (f *HTTPFetcher) OnChange(intervalSeconds int, do func(string)) {
+	version := "init"
+	for {
+		var next string
+		path := fmt.Sprintf("/version?wait=true&value=%s&maxWait=%d", url.QueryEscape(version), intervalSeconds)
+		if err := f.get(path, &next); err != nil {
+			log.Printf("metadata version check failed: %v", err)
+			time.Sleep(time.Duration(intervalSeconds) * time.Second)
+			continue
+		}
+		if next != version {
+			version = next
+			do(version)
+		}
+	}
 }
 
-func (mf RMetaFetcher) GetSelfHost() (metadata.Host, error) {
-	return mf.metadataClient.GetSelfHost()
+func (f *HTTPFetcher) GetServices() (services []Service, err error) {
+	err = f.get("/services", &services)
+	return
+}
+
+func (f *HTTPFetcher) GetContainers() (containers []Container, err error) {
+	err = f.get("/containers", &containers)
+	return
+}
+
+func (f *HTTPFetcher) GetSelfHost() (host Host, err error) {
+	err = f.get("/self/host", &host)
+	return
 }
 
 func (p *Poller) OnChange(do func(string)) {
@@ -44,15 +138,28 @@ func (p *Poller) OnChange(do func(string)) {
 }
 
 func (p *Poller) Init(metadataURL string) error {
-	metadataClient, err := metadata.NewClientAndWait(metadataURL)
+	fetcher, err := NewHTTPFetcher(metadataURL)
 	if err != nil {
 		return err
 	}
 
-	p.MetaFetcher = RMetaFetcher{
-		metadataClient: metadataClient,
+	deadline := time.Now().Add(20 * time.Second)
+	delay := time.Second
+	for {
+		var version string
+		err = fetcher.get("/version", &version)
+		if err == nil {
+			p.MetaFetcher = fetcher
+			return nil
+		}
+		if time.Now().Add(delay).After(deadline) {
+			return fmt.Errorf("metadata service is unavailable: %w", err)
+		}
+		time.Sleep(delay)
+		if delay < 4*time.Second {
+			delay *= 2
+		}
 	}
-	return nil
 }
 
 func (p *Poller) GetHealthCheckServices() (services []types.Service, err error) {
@@ -68,7 +175,7 @@ func (p *Poller) GetHealthCheckServices() (services []types.Service, err error) 
 	if err != nil {
 		return nil, err
 	}
-	var ses []types.Service
+	var result []types.Service
 	// process services
 	for _, svc := range svcs {
 		if svc.HealthCheck.Port == 0 {
@@ -86,7 +193,7 @@ func (p *Poller) GetHealthCheckServices() (services []types.Service, err error) 
 			HealthCheck: svc.HealthCheck,
 			Servers:     servers,
 		}
-		ses = append(ses, s)
+		result = append(result, s)
 	}
 	// process standalone containers
 	for _, c := range cs {
@@ -103,13 +210,13 @@ func (p *Poller) GetHealthCheckServices() (services []types.Service, err error) 
 			HealthCheck: c.HealthCheck,
 			Servers:     servers,
 		}
-		ses = append(ses, s)
+		result = append(result, s)
 	}
-	return ses, nil
+	return result, nil
 }
 
-func addServer(c *metadata.Container, servers *[]types.Server, selfHost *metadata.Host) {
-	if c.PrimaryIp == "" {
+func addServer(c *Container, servers *[]types.Server, selfHost *Host) {
+	if c.PrimaryIP == "" {
 		return
 	}
 	if !(strings.EqualFold(c.State, "running") || strings.EqualFold(c.State, "starting")) {
@@ -125,13 +232,13 @@ func addServer(c *metadata.Container, servers *[]types.Server, selfHost *metadat
 		}
 	}
 	if skipCheck {
-		logrus.Debugf("Health check for container [%s] is not configured on this host, skipping", c.Name)
+		log.Printf("health check for container %q is not assigned to this host; skipping", c.Name)
 		return
 	}
 
 	srvr := types.Server{
-		UUID:    fmt.Sprintf("cattle-%s_%s_%v", selfHost.UUID, c.UUID, c.StartCount),
-		Address: c.PrimaryIp,
+		UUID:    fmt.Sprintf("endpoint-%s_%s_%v", selfHost.UUID, c.UUID, c.StartCount),
+		Address: c.PrimaryIP,
 	}
 	*servers = append(*servers, srvr)
 }

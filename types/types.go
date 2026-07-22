@@ -1,12 +1,17 @@
 package types
 
-import (
-	"github.com/rancher/go-rancher-metadata/metadata"
-)
+type HealthCheck struct {
+	HealthyThreshold   int    `json:"healthy_threshold"`
+	Interval           int    `json:"interval"`
+	Port               int    `json:"port"`
+	RequestLine        string `json:"request_line"`
+	ResponseTimeout    int    `json:"response_timeout"`
+	UnhealthyThreshold int    `json:"unhealthy_threshold"`
+}
 
 type Service struct {
 	UUID        string
-	HealthCheck metadata.HealthCheck
+	HealthCheck HealthCheck
 	Servers     []Server
 }
 
@@ -24,5 +29,5 @@ type MetadataPoller interface {
 type ConfigUpdater interface {
 	ApplyConfig(string)
 	Start() error
-	Run() error
+	Run()
 }
