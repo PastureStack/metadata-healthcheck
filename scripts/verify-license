@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+expected=EB3D7B5485466ACBD81F2B496F595AB637D2792E268206B27D99E793BDB67549
+actual="$(sha256sum LICENSE | awk '{print toupper($1)}')"
+if [[ "$actual" != "$expected" ]]; then
+  printf 'LICENSE hash mismatch: got %s, want %s\n' "$actual" "$expected" >&2
+  exit 1
+fi
+printf 'LICENSE: OK\n'

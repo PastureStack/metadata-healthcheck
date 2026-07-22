@@ -3,20 +3,24 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-
-	"github.com/Sirupsen/logrus"
+	"log"
 )
 
+const defaultMetadataURL = "http://169.254.169.250/2015-12-19"
+
 var (
-	metadataAddress = flag.String("metadata-address", "rancher-metadata", "The metadata service address")
+	metadataURL = flag.String("metadata-url", defaultMetadataURL, "Metadata API base URL")
+	showVersion = flag.Bool("version", false, "Print version and exit")
+	version     = "dev"
 )
 
 func main() {
 	flag.Parse()
-	err := Poll(fmt.Sprintf("http://%s/2015-12-19", *metadataAddress))
-	if err != nil {
-		logrus.Fatal(err)
+	if *showVersion {
+		fmt.Printf("metadata-healthcheck %s\n", version)
+		return
 	}
-	os.Exit(0)
+	if err := Poll(*metadataURL); err != nil {
+		log.Fatal(err)
+	}
 }

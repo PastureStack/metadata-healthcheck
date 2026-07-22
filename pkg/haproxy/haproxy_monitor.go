@@ -3,10 +3,9 @@ package haproxy
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"strings"
-
-	"github.com/Sirupsen/logrus"
 )
 
 const HaproxySock = "/var/run/haproxy.sock"
@@ -18,12 +17,15 @@ type Monitor struct {
 }
 
 func (h *Monitor) Stats() ([]Stat, error) {
-	stats := []Stat{}
-
 	lines, err := h.runCommand("show stat")
 	if err != nil {
 		return nil, err
 	}
+	return parseStats(lines)
+}
+
+func parseStats(lines []string) ([]Stat, error) {
+	stats := []Stat{}
 
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "# ") {
 		return nil, fmt.Errorf("Failed to find stats")
@@ -38,7 +40,7 @@ func (h *Monitor) Stats() ([]Stat, error) {
 
 		values := strings.Split(line, ",")
 		if len(keys) != len(values) {
-			logrus.Errorf("Invalid stat line: %s", line)
+			return nil, fmt.Errorf("invalid HAProxy stat field count: got %d, want %d", len(values), len(keys))
 		}
 
 		stat := Stat{}
@@ -50,7 +52,7 @@ func (h *Monitor) Stats() ([]Stat, error) {
 		stats = append(stats, stat)
 	}
 
-	return stats, err
+	return stats, nil
 }
 
 func (h *Monitor) runCommand(cmd string) ([]string, error) {
@@ -60,7 +62,7 @@ func (h *Monitor) runCommand(cmd string) ([]string, error) {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write([]byte(cmd + "\n"))
+	_, err = io.WriteString(conn, cmd+"\n")
 	if err != nil {
 		return nil, err
 	}
