@@ -4,6 +4,8 @@ Current source builds use Go 1.27.3 while the Go language minimum remains 1.26.0
 
 Metadata Healthcheck is a node-side agent that converts metadata healthcheck declarations into HAProxy probes and reports stable state changes to a compatible control API.
 
+The current published Linux release is [v0.3.17](https://github.com/PastureStack/metadata-healthcheck/releases/tag/v0.3.17).
+
 PastureStack is an independent community effort to preserve, audit, and modernize the Rancher 1.6 ecosystem. It is not affiliated with or endorsed by Rancher Labs or SUSE.
 
 **Upstream:** [`rancher/healthcheck`](https://github.com/rancher/healthcheck). This GitHub fork retains the upstream Git history, authorship, dates, and license notices unchanged; PastureStack maintenance is consolidated into one commit after the preserved upstream boundary.
@@ -35,7 +37,7 @@ docker run --rm \
   -e PLATFORM_URL=https://control.example \
   -e PLATFORM_ACCESS_KEY=replace-me \
   -e PLATFORM_SECRET_KEY=replace-me \
-  ghcr.io/pasturestack/metadata-healthcheck:v0.3.16 \
+  ghcr.io/pasturestack/metadata-healthcheck:v0.3.17 \
   --metadata-url http://169.254.169.250/2015-12-19
 ```
 
@@ -47,7 +49,7 @@ Use scoped runtime credentials and route the link-local metadata address only in
 make test
 make validate
 make build
-IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.16 make integration
+IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.17 make integration
 ```
 
 The integration target verifies the HAProxy process and Unix socket, metadata long polling, authenticated service-event reporting, and the container argument contract on an isolated Docker network.
