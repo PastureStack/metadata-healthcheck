@@ -10,6 +10,10 @@ revision="${IMAGE_REVISION:-$(git rev-parse HEAD)}"
 cp bin/metadata-healthcheck pkg/haproxy/haproxy_reload.sh pkg/haproxy/haproxy_template.cfg \
   LICENSE ORIGIN.md THIRD_PARTY_NOTICES.md package/
 
+mkdir -p package/security
+install -m 0644 security/install-ubuntu-security-updates.sh security/ubuntu-security-packages.lock package/security/
+trap 'rm -f package/security/install-ubuntu-security-updates.sh package/security/ubuntu-security-packages.lock' EXIT
+
 docker build \
   --provenance=false \
   --network "${DOCKER_BUILD_NETWORK:-host}" \
