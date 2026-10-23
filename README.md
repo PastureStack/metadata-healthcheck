@@ -1,6 +1,6 @@
 # Metadata Healthcheck
 
-Current source builds use Go 1.27.3 while the Go language minimum remains 1.26.0. Ubuntu 26.04 images install the checksum-pinned `ca-certificates` 20260816ubuntu0.26.04.1 package without advancing the remaining package snapshot. These source inputs take effect in newly built artifacts; existing published release coordinates below describe their original artifacts.
+Current source builds use Go 1.27.3 while the Go language minimum remains 1.26.0. Ubuntu 26.04 images install the checksum-pinned `ca-certificates` 20260816ubuntu0.26.04.1 package with only officially fixed, already-installed packages advanced by the reviewed security overlay. These source inputs take effect in newly built artifacts; existing published release coordinates below describe their original artifacts.
 
 Metadata Healthcheck is a node-side agent that converts metadata healthcheck declarations into HAProxy probes and reports stable state changes to a compatible control API.
 
@@ -59,3 +59,5 @@ Do not use production credentials for development. See [SECURITY.md](SECURITY.md
 ## License and provenance
 
 This project is distributed under the Apache License 2.0. See [LICENSE](LICENSE), [ORIGIN.md](ORIGIN.md), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Security micro-updates are constrained by `security/ubuntu-security-packages.lock` to the signed Ubuntu 26.04 snapshot of 2026-10-23; the general package snapshot remains unchanged. Builds record the resulting package versions in `/usr/share/pasturestack/ubuntu-security-packages.tsv`. Existing runtime and firewall contracts are unchanged.
