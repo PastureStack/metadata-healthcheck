@@ -1,8 +1,8 @@
 # Metadata Healthcheck
 
-Linux candidate **`v0.3.18`** integrates shared Ubuntu 26.04 security backports for already-installed packages while preserving the selected coreutils provider. It is unpublished; the last published Linux release is [v0.3.17](https://github.com/PastureStack/metadata-healthcheck/releases/tag/v0.3.17).
+Linux runtime **`v0.3.18`** integrates shared Ubuntu 26.04 security backports for already-installed packages while preserving the selected coreutils provider.
 
-Build and image examples below target the candidate. Publication requires completed bundle provenance and the normal final-image release gates. The image retains bundle manifests, source inputs and install/verify receipts under `/usr/share/pasturestack/security/ubuntu-backports/`.
+The image retains bundle manifests, source inputs and installation receipts under `/usr/share/pasturestack/security/ubuntu-backports/`.
 
 Metadata Healthcheck is a node-side agent that converts metadata healthcheck declarations into HAProxy probes and reports stable state changes to a compatible control API.
 
