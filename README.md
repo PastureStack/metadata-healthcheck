@@ -1,10 +1,10 @@
 # Metadata Healthcheck
 
-Current source builds use Go 1.27.3 while the Go language minimum remains 1.26.0. Ubuntu 26.04 images install the checksum-pinned `ca-certificates` 20260816ubuntu0.26.04.1 package with only officially fixed, already-installed packages advanced by the reviewed security overlay. These source inputs take effect in newly built artifacts; existing published release coordinates below describe their original artifacts.
+Linux runtime **`v0.3.18`** integrates shared Ubuntu 26.04 security backports for already-installed packages while preserving the selected coreutils provider.
+
+The image retains bundle manifests, source inputs and installation receipts under `/usr/share/pasturestack/security/ubuntu-backports/`.
 
 Metadata Healthcheck is a node-side agent that converts metadata healthcheck declarations into HAProxy probes and reports stable state changes to a compatible control API.
-
-The current published Linux release is [v0.3.17](https://github.com/PastureStack/metadata-healthcheck/releases/tag/v0.3.17).
 
 PastureStack is an independent community effort to preserve, audit, and modernize the Rancher 1.6 ecosystem. It is not affiliated with or endorsed by Rancher Labs or SUSE.
 
@@ -37,7 +37,7 @@ docker run --rm \
   -e PLATFORM_URL=https://control.example \
   -e PLATFORM_ACCESS_KEY=replace-me \
   -e PLATFORM_SECRET_KEY=replace-me \
-  ghcr.io/pasturestack/metadata-healthcheck:v0.3.17 \
+  ghcr.io/pasturestack/metadata-healthcheck:v0.3.18 \
   --metadata-url http://169.254.169.250/2015-12-19
 ```
 
@@ -49,7 +49,7 @@ Use scoped runtime credentials and route the link-local metadata address only in
 make test
 make validate
 make build
-IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.17 make integration
+IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.18 make integration
 ```
 
 The integration target verifies the HAProxy process and Unix socket, metadata long polling, authenticated service-event reporting, and the container argument contract on an isolated Docker network.
