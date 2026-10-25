@@ -1,6 +1,8 @@
 # Metadata Healthcheck
 
-Linux runtime **`v0.3.18`** integrates shared Ubuntu 26.04 security backports for already-installed packages while preserving the selected coreutils provider.
+Linux runtime **`v0.3.19`** integrates shared Ubuntu 26.04 security backports for already-installed packages while preserving the selected coreutils provider.
+
+The shared bundle includes the official Brotli decoder fix for CVE-2026-111497.
 
 The image retains bundle manifests, source inputs and installation receipts under `/usr/share/pasturestack/security/ubuntu-backports/`.
 
@@ -37,7 +39,7 @@ docker run --rm \
   -e PLATFORM_URL=https://control.example \
   -e PLATFORM_ACCESS_KEY=replace-me \
   -e PLATFORM_SECRET_KEY=replace-me \
-  ghcr.io/pasturestack/metadata-healthcheck:v0.3.18 \
+  ghcr.io/pasturestack/metadata-healthcheck:v0.3.19 \
   --metadata-url http://169.254.169.250/2015-12-19
 ```
 
@@ -49,7 +51,7 @@ Use scoped runtime credentials and route the link-local metadata address only in
 make test
 make validate
 make build
-IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.18 make integration
+IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.19 make integration
 ```
 
 The integration target verifies the HAProxy process and Unix socket, metadata long polling, authenticated service-event reporting, and the container argument contract on an isolated Docker network.

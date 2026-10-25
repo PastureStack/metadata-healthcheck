@@ -48,7 +48,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$RELEASE_TAG" = 'v0.3.18'
+          test "$RELEASE_TAG" = 'v0.3.19'
           test -z "$(git status --porcelain)"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
@@ -104,7 +104,7 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$cache:/root/.cache/trivy" -v "$PWD/evidence:/evidence" "$TRIVY_IMAGE" \
             image --skip-db-update --format cyclonedx --output /evidence/image.cdx.json "$TESTED_IMAGE"
-          bundle_image='ghcr.io/pasturestack/ubuntu-security-backports:v0.1.0@sha256:2742a3d429e4e14bc587f6dedc51ded4246cf90bbaedcd86c67d0885e32a6f2a'
+          bundle_image='ghcr.io/pasturestack/ubuntu-security-backports:v0.1.1@sha256:45d6b507b63a18459ae5cf76afd4d9731f8ef43b9c40e4c3dbb01899e1752b19'
           mkdir -p evidence/bundle-tools
           bundle_container=$(docker create "$bundle_image" unused)
           trap 'docker rm "$bundle_container" >/dev/null' EXIT
@@ -118,7 +118,7 @@ jobs:
           python3 evidence/bundle-tools/verify-consumer-evidence.py \
             --evidence-dir evidence/ubuntu-backports --sbom evidence/image.cdx.json \
             --bundle-checksums evidence/bundle-tools/SHA256SUMS \
-            --expected-bundle-digest 'sha256:2742a3d429e4e14bc587f6dedc51ded4246cf90bbaedcd86c67d0885e32a6f2a' > evidence/ubuntu-backports-validation.json
+            --expected-bundle-digest 'sha256:45d6b507b63a18459ae5cf76afd4d9731f8ef43b9c40e4c3dbb01899e1752b19' > evidence/ubuntu-backports-validation.json
           # Only native Trivy interprets the exact qualified OpenVEX statements.
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$cache:/root/.cache/trivy" -v "$PWD/evidence:/evidence" "$TRIVY_IMAGE" \
