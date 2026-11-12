@@ -33,8 +33,9 @@ RUN set -eux; \
     done; \
     rm -f /tmp/apt.deb /tmp/libapt-pkg7.0.deb; \
     apt-get update --error-on=any; \
+    # Preserve the input version for the existing checksum-qualified Brotli backport.\
     apt-get install -y --no-install-recommends \
-        bash /tmp/ca-certificates.deb curl haproxy iputils-ping libcap2-bin netcat-openbsd tini; \
+        bash /tmp/ca-certificates.deb curl haproxy iputils-ping libbrotli1=1.2.0-3build1 libcap2-bin netcat-openbsd tini; \
     test "$(dpkg-query -W -f='${Version}' ca-certificates)" = '20260816ubuntu0.26.04.2'; \
     sh /usr/local/lib/pasturestack/install-ubuntu-security-updates.sh /usr/share/pasturestack/ubuntu-security-packages.lock /etc/ssl/certs/ca-certificates.crt; \
     test "$(dpkg-query -W -f='${Version}' haproxy)" = '3.2.25-0ubuntu0.26.04.2'; \
