@@ -1,9 +1,11 @@
 #!/bin/sh
 # Same-series official micro-updates. Never install a package just for a scan.
 set -eu
-test "$#" -eq 2 || { echo 'usage: security-updates LOCK TRUSTED_CA_BUNDLE' >&2; exit 2; }
+test "$#" -ge 2 && test "$#" -le 3 || { echo 'usage: security-updates LOCK TRUSTED_CA_BUNDLE [SNAPSHOT]' >&2; exit 2; }
 lock=$1
 trusted_ca=$2
+snapshot=${3:-20261023T000000Z}
+printf '%s\n' "$snapshot" | grep -Eq '^[0-9]{8}T[0-9]{6}Z$'
 . /etc/os-release
 test "$ID:$VERSION_ID" = ubuntu:26.04
 test -s "$lock"
@@ -26,7 +28,7 @@ while IFS= read -r entry || test -n "$entry"; do
     set -- "$@" "$entry"
 done < "$lock"
 if test "$#" -gt 0; then
-    printf 'Types: deb\nURIs: https://snapshot.ubuntu.com/ubuntu/20261023T000000Z\nSuites: resolute-updates resolute-security\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\nSnapshot: no\n' > "$tmp/security.sources"
+    printf 'Types: deb\nURIs: https://snapshot.ubuntu.com/ubuntu/%s\nSuites: resolute-updates resolute-security\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\nSnapshot: no\n' "$snapshot" > "$tmp/security.sources"
     apt_security() {
         apt-get -o Dir::Etc::sourcelist="$tmp/security.sources" \
             -o Dir::Etc::sourceparts=- -o Acquire::https::CaInfo="$trusted_ca" \

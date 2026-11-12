@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.27.3
+          go-version: 1.27.4
           cache: false
       - name: Validate manual release request
         if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
@@ -48,7 +48,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$RELEASE_TAG" = 'v0.3.19'
+          test "$RELEASE_TAG" = 'v0.3.20'
           test -z "$(git status --porcelain)"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = go1.27.3
+          test "$(go env GOVERSION)" = go1.27.4
           image=local/metadata-healthcheck:"${VERSION}"
           bash scripts/validate
           bash scripts/test
@@ -80,11 +80,11 @@ jobs:
           (cd evidence/ubuntu-backports && sha256sum --check SHA256SUMS)
           docker cp "$container:/etc/ssl/certs/ca-certificates.crt" evidence/ca-certificates.crt
           go version -m evidence/product | tee evidence/product-go-version.txt
-          grep -F 'go1.27.3' evidence/product-go-version.txt
+          grep -F 'go1.27.4' evidence/product-go-version.txt
           test -s evidence/ca-certificates.crt
           sha256sum evidence/product evidence/ca-certificates.crt > evidence/SHA256SUMS
           docker run --rm --entrypoint dpkg-query "$image" -W '-f=${Version}\n' ca-certificates | tee evidence/ca-version.txt
-          grep -Fx '20260816ubuntu0.26.04.1' evidence/ca-version.txt
+          grep -Fx '20260816ubuntu0.26.04.2' evidence/ca-version.txt
           docker image inspect "$image" > evidence/image-inspect.json
       - name: Scan the tested runtime image
         shell: bash
