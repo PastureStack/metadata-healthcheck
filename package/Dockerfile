@@ -2,14 +2,18 @@
 FROM ghcr.io/pasturestack/ubuntu-security-backports:v0.1.1@sha256:45d6b507b63a18459ae5cf76afd4d9731f8ef43b9c40e4c3dbb01899e1752b19 AS ubuntu_security_backports
 FROM ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
 
-ARG UBUNTU_SNAPSHOT=20260825T000000Z
-
 COPY security/install-ubuntu-security-updates.sh /usr/local/lib/pasturestack/install-ubuntu-security-updates.sh
 COPY security/ubuntu-security-packages.lock /usr/share/pasturestack/ubuntu-security-packages.lock
 
-ADD --checksum=sha256:5b6326f1932cfd7be57130561dc78192f09ed9f58bfbe6606ed0c50510c3b6cd \
-    https://archive.ubuntu.com/ubuntu/pool/main/c/ca-certificates/ca-certificates_20260816ubuntu0.26.04.1_all.deb \
+ADD --checksum=sha256:a7e3bf769aec16ba21ca39cba180d6d311dafcbae68346a05f137c5cc26c9ca6 \
+    https://security.ubuntu.com/ubuntu/pool/main/c/ca-certificates/ca-certificates_20260816ubuntu0.26.04.2_all.deb \
     /tmp/ca-certificates.deb
+ADD --checksum=sha256:0de729b8fe0e1c67c04e8e8d5bd6e0420dbd47f75b93f0b71c8e740edc2d5ffc \
+    https://security.ubuntu.com/ubuntu/pool/main/a/apt/apt_3.2.1ubuntu0.1_amd64.deb \
+    /tmp/apt.deb
+ADD --checksum=sha256:94e5d41303265b66af0f8c70ade18bfb77260ad286edee6c8045faddef82b94c \
+    https://security.ubuntu.com/ubuntu/pool/main/a/apt/libapt-pkg7.0_3.2.1ubuntu0.1_amd64.deb \
+    /tmp/libapt-pkg7.0.deb
 ARG IMAGE_VERSION=dev
 ARG IMAGE_CREATED=2026-07-22T09:31:42Z
 ARG IMAGE_REVISION=unknown
@@ -21,13 +25,22 @@ RUN set -eux; \
     find /tmp/ca-bootstrap/usr/share/ca-certificates -type f -name '*.crt' | LC_ALL=C sort | while IFS= read -r certificate; do sed -e '$a\' "${certificate}"; done > /etc/ssl/certs/ca-certificates.crt; \
     rm -rf /tmp/ca-bootstrap; \
     rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; \
-    printf 'Types: deb\nURIs: https://snapshot.ubuntu.com/ubuntu/%s\nSuites: resolute resolute-updates resolute-backports resolute-security\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\nSnapshot: no\n' "${UBUNTU_SNAPSHOT}" > /etc/apt/sources.list.d/pasturestack-snapshot.sources; \
+    printf 'Types: deb\nURIs: https://archive.ubuntu.com/ubuntu\nSuites: resolute resolute-updates resolute-security\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\nSnapshot: no\n' > /etc/apt/sources.list.d/pasturestack-snapshot.sources; \
     printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::http::Pipeline-Depth "0";\nAcquire::https::CaInfo "/etc/ssl/certs/ca-certificates.crt";\nAcquire::https::Verify-Peer "true";\nAcquire::https::Verify-Host "true";\nAcquire::AllowInsecureRepositories "false";\nAPT::Get::AllowUnauthenticated "false";\n' > /etc/apt/apt.conf.d/80pasturestack-snapshot; \
-    apt-get update; \
+    dpkg -i /tmp/apt.deb /tmp/libapt-pkg7.0.deb; \
+    for package in apt libapt-pkg7.0; do \
+        test "$(dpkg-query -W -f='${Version}' "$package")" = '3.2.1ubuntu0.1'; \
+    done; \
+    rm -f /tmp/apt.deb /tmp/libapt-pkg7.0.deb; \
+    apt-get update --error-on=any; \
+    # Preserve the input version for the existing checksum-qualified Brotli backport.\
     apt-get install -y --no-install-recommends \
-        bash /tmp/ca-certificates.deb curl haproxy iputils-ping libcap2-bin netcat-openbsd tini; \
-    test "$(dpkg-query -W -f='${Version}' ca-certificates)" = '20260816ubuntu0.26.04.1'; \
+        bash /tmp/ca-certificates.deb curl haproxy iputils-ping libbrotli1=1.2.0-3build1 libcap2-bin netcat-openbsd tini; \
+    test "$(dpkg-query -W -f='${Version}' ca-certificates)" = '20260816ubuntu0.26.04.2'; \
     sh /usr/local/lib/pasturestack/install-ubuntu-security-updates.sh /usr/share/pasturestack/ubuntu-security-packages.lock /etc/ssl/certs/ca-certificates.crt; \
+    test "$(dpkg-query -W -f='${Version}' haproxy)" = '3.2.25-0ubuntu0.26.04.2'; \
+    /usr/sbin/haproxy -v | grep -F 'HAProxy version 3.2.25-0ubuntu0.26.04.2'; \
+    test "$(dpkg-query -W -f='${Version}' perl-base)" = '5.40.1-7ubuntu0.4'; \
     dpkg-query -W -f='${binary:Package}\t${Version}\n' | LC_ALL=C sort > /usr/share/pasturestack/ubuntu-security-packages.tsv; \
     rm -f /tmp/ca-certificates.deb; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /var/log/apt/*; \

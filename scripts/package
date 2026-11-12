@@ -17,7 +17,6 @@ trap 'rm -f package/security/install-ubuntu-security-updates.sh package/security
 docker build \
   --provenance=false \
   --network "${DOCKER_BUILD_NETWORK:-host}" \
-  --build-arg UBUNTU_MIRROR="${UBUNTU_MIRROR:-http://archive.ubuntu.com/ubuntu}" \
   --build-arg IMAGE_CREATED="${IMAGE_CREATED:-2026-07-22T09:31:42Z}" \
   --build-arg IMAGE_REVISION="$revision" \
   --build-arg IMAGE_VERSION="$tag" \

@@ -26,7 +26,7 @@ while IFS= read -r entry || test -n "$entry"; do
     set -- "$@" "$entry"
 done < "$lock"
 if test "$#" -gt 0; then
-    printf 'Types: deb\nURIs: https://snapshot.ubuntu.com/ubuntu/20261023T000000Z\nSuites: resolute-updates resolute-security\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\nSnapshot: no\n' > "$tmp/security.sources"
+    printf 'Types: deb\nURIs: https://archive.ubuntu.com/ubuntu\nSuites: resolute-updates resolute-security\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > "$tmp/security.sources"
     apt_security() {
         apt-get -o Dir::Etc::sourcelist="$tmp/security.sources" \
             -o Dir::Etc::sourceparts=- -o Acquire::https::CaInfo="$trusted_ca" \
@@ -34,7 +34,7 @@ if test "$#" -gt 0; then
             -o Acquire::AllowInsecureRepositories=false -o APT::Get::AllowUnauthenticated=false \
             -o Acquire::Retries=5 "$@"
     }
-    apt_security update
+    apt_security update --error-on=any
     DEBIAN_FRONTEND=noninteractive apt_security install -y --only-upgrade --no-install-recommends --no-remove "$@"
 fi
 while IFS= read -r entry || test -n "$entry"; do
