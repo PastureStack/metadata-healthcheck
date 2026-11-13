@@ -1,6 +1,6 @@
 # Metadata Healthcheck
 
-Linux runtime **`v0.3.20`** includes Ubuntu 26.04 HAProxy `3.2.25-0ubuntu0.26.04.2` for [USN-8972-1](https://ubuntu.com/security/notices/USN-8972-1) and Ubuntu's Perl base fix for [CVE-2026-82560](https://ubuntu.com/security/CVE-2026-82560). The build bootstraps with the fixed APT packages from [USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1). It also includes the CA package update from [USN-9001-1](https://ubuntu.com/security/notices/USN-9001-1) and retains the existing shared security backports.
+Linux runtime **`v0.3.20`** includes Ubuntu 26.04 HAProxy `3.2.25-0ubuntu0.26.04.2` for [USN-8972-1](https://ubuntu.com/security/notices/USN-8972-1) and Ubuntu's Perl base fix for [CVE-2026-82560](https://ubuntu.com/security/CVE-2026-82560). The build bootstraps with the fixed APT packages from [USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1). It also includes the CA package update from [USN-9001-1](https://ubuntu.com/security/notices/USN-9001-1) and retains the existing shared security backports. The next runtime build also validates the official Ubuntu glibc replacement from [USN-9065-1](https://ubuntu.com/security/notices/USN-9065-1).
 
 The shared bundle includes the official Brotli decoder fix for CVE-2026-111497.
 
