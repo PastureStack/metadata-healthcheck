@@ -1,6 +1,6 @@
 # Metadata Healthcheck
 
-Linux runtime **`v0.3.20`** includes Ubuntu 26.04 HAProxy `3.2.25-0ubuntu0.26.04.2` for [USN-8972-1](https://ubuntu.com/security/notices/USN-8972-1) and Ubuntu's Perl base fix for [CVE-2026-82560](https://ubuntu.com/security/CVE-2026-82560). The build bootstraps with the fixed APT packages from [USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1). It also includes the CA package update from [USN-9001-1](https://ubuntu.com/security/notices/USN-9001-1) and retains the existing shared security backports. The next runtime build also validates the official Ubuntu glibc replacement from [USN-9065-1](https://ubuntu.com/security/notices/USN-9065-1).
+Linux runtime **`v0.3.21`** includes Ubuntu 26.04 HAProxy `3.2.25-0ubuntu0.26.04.2` for [USN-8972-1](https://ubuntu.com/security/notices/USN-8972-1) and Ubuntu's Perl base fix for [CVE-2026-82560](https://ubuntu.com/security/CVE-2026-82560). The build bootstraps with the fixed APT packages from [USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1). It also includes the CA package update from [USN-9001-1](https://ubuntu.com/security/notices/USN-9001-1) and includes the official Ubuntu glibc 2.43-2ubuntu2.7 replacement from [USN-9065-1](https://ubuntu.com/security/notices/USN-9065-1).
 
 The shared bundle includes the official Brotli decoder fix for CVE-2026-111497.
 
@@ -39,7 +39,7 @@ docker run --rm \
   -e PLATFORM_URL=https://control.example \
   -e PLATFORM_ACCESS_KEY=replace-me \
   -e PLATFORM_SECRET_KEY=replace-me \
-  ghcr.io/pasturestack/metadata-healthcheck:v0.3.20 \
+  ghcr.io/pasturestack/metadata-healthcheck:v0.3.21 \
   --metadata-url http://169.254.169.250/2015-12-19
 ```
 
@@ -51,7 +51,7 @@ Use scoped runtime credentials and route the link-local metadata address only in
 make test
 make validate
 make build
-IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.20 make integration
+IMAGE=ghcr.io/pasturestack/metadata-healthcheck:v0.3.21 make integration
 ```
 
 The integration target verifies the HAProxy process and Unix socket, metadata long polling, authenticated service-event reporting, and the container argument contract on an isolated Docker network.
