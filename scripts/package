@@ -14,6 +14,16 @@ mkdir -p package/security
 install -m 0644 security/install-ubuntu-security-updates.sh security/ubuntu-security-packages.lock package/security/
 trap 'rm -f package/security/install-ubuntu-security-updates.sh package/security/ubuntu-security-packages.lock' EXIT
 
+if [ "${CHECK_QUALIFIED_BACKPORTS:-0}" = 1 ]; then
+  docker build --target qualified_backports \
+    --provenance=false \
+    --network "${DOCKER_BUILD_NETWORK:-host}" \
+    --build-arg IMAGE_CREATED="${IMAGE_CREATED:-2026-07-22T09:31:42Z}" \
+    --build-arg IMAGE_REVISION="$revision" \
+    --build-arg IMAGE_VERSION="$tag" \
+    -t "$image-backports" package/
+fi
+
 docker build \
   --provenance=false \
   --network "${DOCKER_BUILD_NETWORK:-host}" \
