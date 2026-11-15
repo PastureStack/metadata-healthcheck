@@ -660,6 +660,28 @@
       "officialEvidence": "https://ubuntu.com/security/CVE-2026-78408",
       "reason": "Ubuntu 26.04 Resolute still lists util-linux as vulnerable with no published fixed package. The Ubuntu priority is Medium; upstream CVSS is 7.9 High.",
       "checkedAt": "2026-11-12"
+    },
+    {
+      "severity": "MEDIUM",
+      "purl": "pkg:deb/ubuntu/libsystemd0@259.5-0ubuntu3.4?arch=amd64&distro=ubuntu-26.04",
+      "package": "libsystemd0",
+      "id": "CVE-2026-121876",
+      "version": "259.5-0ubuntu3.4",
+      "status": "no_official_fix",
+      "officialEvidence": "https://raw.githubusercontent.com/canonical/ubuntu-security-notices/dd17a57526859cf8505026729bf015fc2411a952/osv/cve/2026/UBUNTU-CVE-2026-121876.json",
+      "reason": "Canonical OSV includes the installed Ubuntu 26.04 systemd source version and matching binary names without a fixed range endpoint.",
+      "checkedAt": "2026-11-15"
+    },
+    {
+      "severity": "MEDIUM",
+      "purl": "pkg:deb/ubuntu/libudev1@259.5-0ubuntu3.4?arch=amd64&distro=ubuntu-26.04",
+      "package": "libudev1",
+      "id": "CVE-2026-121876",
+      "version": "259.5-0ubuntu3.4",
+      "status": "no_official_fix",
+      "officialEvidence": "https://raw.githubusercontent.com/canonical/ubuntu-security-notices/dd17a57526859cf8505026729bf015fc2411a952/osv/cve/2026/UBUNTU-CVE-2026-121876.json",
+      "reason": "Canonical OSV includes the installed Ubuntu 26.04 systemd source version and matching binary names without a fixed range endpoint.",
+      "checkedAt": "2026-11-15"
     }
   ]
 }
